@@ -1,0 +1,545 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================
+// Enums
+// ===========================
+
+enum VehicleType {
+  BUS
+  TRAIN
+  FLIGHT
+}
+
+enum StopType {
+  BUS_STOP
+  TRAIN_STATION
+  AIRPORT
+}
+
+enum SeatClass {
+  ECONOMY
+  BUSINESS
+  FIRST_CLASS
+  SLEEPER
+  SEMI_SLEEPER
+  SEATER
+}
+
+enum TripStatus {
+  SCHEDULED
+  ON_TIME
+  DELAYED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  FAILED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum SupportTicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+// ===========================
+// Models: RBAC & Users
+// ===========================
+
+model Permission {
+  id          String           @id @default(uuid())
+  name        String           @unique // e.g. "CREATE_BOOKING", "MANAGE_USERS"
+  description String?
+  roles       RolePermission[]
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique // e.g. "SUPER_ADMIN", "OPERATOR", "CUSTOMER"
+  description String?
+  permissions RolePermission[]
+  users       UserRole[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String?
+  firstName    String
+  lastName     String?
+  phone        String?   @unique
+  avatar       String?
+  isVerified   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  roles          UserRole[]
+  bookings       Booking[]
+  wallet         Wallet?
+  reviews        Review[]
+  notifications  Notification[]
+  supportTickets SupportTicket[]
+  sessions       UserSession[]
+}
+
+model UserSession {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+// ===========================
+// Models: Operators & Catalog
+// ===========================
+
+model Operator {
+  id           String   @id @default(uuid())
+  name         String
+  code         String   @unique // e.g. "INDIGO", "REDBUS_EXPRESS"
+  logo         String?
+  contactEmail String   @unique
+  contactPhone String   @unique
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  vehicles Vehicle[]
+}
+
+model Vehicle {
+  id                 String      @id @default(uuid())
+  operatorId         String
+  operator           Operator    @relation(fields: [operatorId], references: [id], onDelete: Restrict)
+  type               VehicleType
+  name               String      // e.g. "Volvo B11R", "Airbus A320"
+  registrationNumber String      @unique // e.g. Flight No, Train No, Bus Plate
+  capacity           Int
+  amenities          String[]    // JSON array of strings
+  metadata           Json?       // Mode-specific data (e.g. carriage config for trains)
+  isActive           Boolean     @default(true)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  seatLayouts SeatLayout[]
+  trips       Trip[]
+  schedules   Schedule[]
+}
+
+model SeatLayout {
+  id        String  @id @default(uuid())
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  name      String  // e.g. "Lower Deck", "Economy Class"
+  rows      Int
+  columns   Int
+
+  seats Seat[]
+}
+
+model Seat {
+  id          String    @id @default(uuid())
+  layoutId    String
+  layout      SeatLayout @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+  seatNumber  String
+  seatClass   SeatClass
+  isAvailable Boolean   @default(true)
+  priceOffset Float     @default(0) // Premium for window seats etc.
+  row         Int
+  column      Int
+
+  bookingSeats BookingSeat[]
+
+  @@unique([layoutId, seatNumber])
+}
+
+// ===========================
+// Models: Routes & Stops
+// ===========================
+
+model Stop {
+  id        String   @id @default(uuid())
+  code      String   @unique // e.g. "DEL", "NDLS", "KAS"
+  name      String
+  type      StopType
+  city      String
+  state     String
+  country   String   @default("India")
+  latitude  Float
+  longitude Float
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  routeStops    RouteStop[]
+  boardingsAs   Booking[]   @relation("BoardingStop")
+  droppingsAs   Booking[]   @relation("DroppingStop")
+}
+
+model Route {
+  id                String   @id @default(uuid())
+  code              String   @unique
+  originCity        String
+  destinationCity   String
+  distance          Float    // km
+  estimatedDuration Int      // minutes
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  stops     RouteStop[]
+  schedules Schedule[]
+  trips     Trip[]
+}
+
+model RouteStop {
+  id                      String   @id @default(uuid())
+  routeId                 String
+  route                   Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  stopId                  String
+  stop                    Stop     @relation(fields: [stopId], references: [id], onDelete: Restrict)
+  order                   Int
+  distanceFromOrigin      Float
+  estimatedTimeFromOrigin Int      // minutes
+
+  @@unique([routeId, stopId])
+  @@unique([routeId, order])
+}
+
+// ===========================
+// Models: Schedules & Trips
+// ===========================
+
+model Schedule {
+  id            String   @id @default(uuid())
+  routeId       String
+  route         Route    @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  vehicleId     String
+  vehicle       Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  departureTime String   // HH:mm format
+  arrivalTime   String   // HH:mm format
+  recurrence    String   // Cron expression or days of week (e.g. "1,3,5")
+  baseFare      Float
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Trip {
+  id                 String     @id @default(uuid())
+  routeId            String
+  route              Route      @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  vehicleId          String
+  vehicle            Vehicle    @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  date               DateTime   @db.Date
+  actualDeparture    DateTime
+  actualArrival      DateTime
+  status             TripStatus @default(SCHEDULED)
+  baseFare           Float
+  availableCapacity  Int
+  cancellationPolicy Json?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  bookings Booking[]
+  reviews  Review[]
+
+  @@index([routeId, date])
+  @@index([status, date])
+}
+
+// ===========================
+// Models: Bookings
+// ===========================
+
+model Booking {
+  id             String        @id @default(uuid())
+  bookingRef     String        @unique // e.g. PNR or Booking ID
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tripId         String
+  trip           Trip          @relation(fields: [tripId], references: [id], onDelete: Restrict)
+  boardingStopId String
+  boardingStop   Stop          @relation("BoardingStop", fields: [boardingStopId], references: [id], onDelete: Restrict)
+  droppingStopId String
+  droppingStop   Stop          @relation("DroppingStop", fields: [droppingStopId], references: [id], onDelete: Restrict)
+  status         BookingStatus @default(PENDING)
+  totalAmount    Float
+  discountAmount Float         @default(0)
+  finalAmount    Float
+  contactEmail   String
+  contactPhone   String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  couponId String?
+  coupon   Coupon? @relation(fields: [couponId], references: [id], onDelete: SetNull)
+
+  passengers BookingPassenger[]
+  seats      BookingSeat[]
+  payment    Payment?
+  invoice    Invoice?
+}
+
+model Passenger {
+  id             String             @id @default(uuid())
+  firstName      String
+  lastName       String
+  age            Int
+  gender         Gender
+  idProofType    String?            // e.g. "PASSPORT", "AADHAAR"
+  idProofNumber  String?
+  createdAt      DateTime           @default(now())
+
+  bookingPassengers BookingPassenger[]
+}
+
+model BookingPassenger {
+  bookingId   String
+  passengerId String
+  booking     Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  passenger   Passenger @relation(fields: [passengerId], references: [id], onDelete: Restrict)
+
+  @@id([bookingId, passengerId])
+}
+
+model BookingSeat {
+  id        String  @id @default(uuid())
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  seatId    String
+  seat      Seat    @relation(fields: [seatId], references: [id], onDelete: Restrict)
+  fare      Float
+
+  @@unique([bookingId, seatId])
+}
+
+// ===========================
+// Models: Financials
+// ===========================
+
+model Payment {
+  id              String        @id @default(uuid())
+  bookingId       String        @unique
+  booking         Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  amount          Float
+  currency        String        @default("INR")
+  status          PaymentStatus @default(PENDING)
+  provider        String        // e.g. "STRIPE", "WALLET"
+  providerRefId   String?       @unique // Transaction ID from Stripe etc
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  refunds Refund[]
+}
+
+model Refund {
+  id            String       @id @default(uuid())
+  paymentId     String
+  payment       Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  amount        Float
+  reason        String?
+  status        RefundStatus @default(PENDING)
+  providerRefId String?      @unique
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Invoice {
+  id            String   @id @default(uuid())
+  invoiceNumber String   @unique
+  bookingId     String   @unique
+  booking       Booking  @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  totalAmount   Float
+  taxAmount     Float
+  issuedAt      DateTime @default(now())
+  pdfUrl        String?
+}
+
+model Wallet {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  balance   Float    @default(0)
+  currency  String   @default("INR")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions WalletTransaction[]
+}
+
+model WalletTransaction {
+  id          String                @id @default(uuid())
+  walletId    String
+  wallet      Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  amount      Float
+  type        WalletTransactionType
+  description String
+  referenceId String?               // e.g. Booking ID or Payment ID
+  createdAt   DateTime              @default(now())
+}
+
+// ===========================
+// Models: Engagement & Marketing
+// ===========================
+
+model Coupon {
+  id               String   @id @default(uuid())
+  code             String   @unique
+  description      String?
+  discountType     String   // "PERCENTAGE" or "FIXED"
+  discountValue    Float
+  minBookingAmount Float    @default(0)
+  maxDiscount      Float?
+  validFrom        DateTime
+  validUntil       DateTime
+  usageLimit       Int      @default(0)
+  currentUsage     Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  bookings Booking[]
+}
+
+model Offer {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  imageUrl    String?
+  validFrom   DateTime
+  validUntil  DateTime
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  rating    Int      // 1-5
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, tripId])
+}
+
+model Rating {
+  id         String   @id @default(uuid())
+  entityType String   // "OPERATOR", "VEHICLE"
+  entityId   String
+  score      Float
+  totalVotes Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([entityType, entityId])
+}
+
+// ===========================
+// Models: Support & Comms
+// ===========================
+
+model SupportTicket {
+  id          String                @id @default(uuid())
+  ticketRef   String                @unique // e.g. TKT-12345
+  userId      String
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject     String
+  status      SupportTicketStatus   @default(OPEN)
+  priority    SupportTicketPriority @default(MEDIUM)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  messages TicketMessage[]
+}
+
+model TicketMessage {
+  id        String        @id @default(uuid())
+  ticketId  String
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId  String        // User ID of the customer or admin
+  message   String
+  isFromAdmin Boolean     @default(false)
+  createdAt DateTime      @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  type      String   // e.g. "PROMO", "SYSTEM", "BOOKING"
+  isRead    Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
