@@ -1,6 +1,6 @@
 export const config = {
   api: {
-    baseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1',
+    baseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api/v1',
     timeout: 30000,
   },
   mapbox: {
@@ -25,10 +25,10 @@ export const config = {
     clientId: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',
   },
   app: {
-    name: 'TravelBooking',
-    tagline: 'Book bus tickets online with ease',
-    supportEmail: 'support@travelbooking.com',
-    supportPhone: '+91 1800-123-4567',
+    name: 'RailSwift',
+    tagline: 'Smart Train & Bus Ticket Booking Platform',
+    supportEmail: 'support@railswift.com',
+    supportPhone: '+91 1800-889-7943',
   },
 } as const;
 

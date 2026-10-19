@@ -262,6 +262,28 @@ export default function LoginPage() {
             )}
           </div>
 
+          {/* Quick Demo One-Click Login */}
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => {
+                const demoUser = {
+                  id: 'demo-user-id',
+                  firstName: 'Demo',
+                  lastName: 'Traveler',
+                  email: 'demo@railswift.com',
+                  roles: ['CUSTOMER'],
+                  createdAt: new Date().toISOString(),
+                };
+                setAuth(demoUser as any, 'demo-jwt-token-123');
+                navigate('/dashboard');
+              }}
+              className="w-full py-2.5 px-4 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-semibold text-xs tracking-wide flex items-center justify-center gap-2 transition-all active:scale-95"
+            >
+              <span>⚡ One-Click Instant Guest / Demo Login</span>
+            </button>
+          </div>
+
           {/* Sign Up Link */}
           <p className="mt-7 text-center text-sm text-white/50">
             Don't have an account?{' '}

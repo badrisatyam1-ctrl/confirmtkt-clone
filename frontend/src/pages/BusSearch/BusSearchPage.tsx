@@ -116,6 +116,7 @@ export default function BusSearchPage() {
   const [trips, setTrips] = useState(MOCK_TRIPS);
   const [filters, setFilters] = useState({
     ac: false,
+    nonAc: false,
     sleeper: false,
     seater: false,
   });
@@ -155,17 +156,33 @@ export default function BusSearchPage() {
 
   const displayedTrips = trips.filter(trip => {
     const typeLower = trip.busType.toLowerCase();
-    const isAc = typeLower.includes('a/c') || typeLower.includes('ac');
+    
+    // Explicit Non-AC identification
+    const isNonAc = typeLower.includes('non-ac') || typeLower.includes('non ac') || typeLower.includes('non a/c') || typeLower.includes('non-a/c');
+    
+    // Explicit AC identification: must NOT be non-AC
+    const isAc = !isNonAc && (
+      typeLower.includes('a/c') || 
+      typeLower.includes(' ac') || 
+      typeLower.includes('ac ') || 
+      typeLower.includes('volvo') || 
+      typeLower.includes('scania') || 
+      typeLower.includes('bharat benz') || 
+      typeLower.includes('electric')
+    );
+    
     const isSleeper = typeLower.includes('sleeper');
-    const isSeater = typeLower.includes('seater');
+    const isSeater = typeLower.includes('seater') || typeLower.includes('semi sleeper') || typeLower.includes('semi-sleeper');
 
     let typePass = true;
-    if (filters.ac || filters.sleeper || filters.seater) {
-       // If any filter is checked, it must meet ALL checked conditions (AND logic)
-       if (filters.ac && !isAc) typePass = false;
-       if (filters.sleeper && !isSleeper) typePass = false;
-       if (filters.seater && !isSeater) typePass = false;
-    }
+    
+    // AC / Non-AC filter check
+    if (filters.ac && !filters.nonAc && !isAc) typePass = false;
+    if (filters.nonAc && !filters.ac && !isNonAc) typePass = false;
+    
+    // Seating type filter check
+    if (filters.sleeper && !filters.seater && !isSleeper) typePass = false;
+    if (filters.seater && !filters.sleeper && !isSeater) typePass = false;
 
     let timePass = true;
     if (timeFilters.length > 0) {
@@ -218,15 +235,19 @@ export default function BusSearchPage() {
                   <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Bus Type</h4>
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={filters.ac} onChange={() => toggleFilter('ac')} className="rounded border-slate-300" />
+                      <input type="checkbox" checked={filters.ac} onChange={() => toggleFilter('ac')} className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
                       <span className="text-sm text-slate-600 dark:text-slate-400">AC</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={filters.sleeper} onChange={() => toggleFilter('sleeper')} className="rounded border-slate-300" />
+                      <input type="checkbox" checked={filters.nonAc} onChange={() => toggleFilter('nonAc')} className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                      <span className="text-sm text-slate-600 dark:text-slate-400">Non-AC</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={filters.sleeper} onChange={() => toggleFilter('sleeper')} className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
                       <span className="text-sm text-slate-600 dark:text-slate-400">Sleeper</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={filters.seater} onChange={() => toggleFilter('seater')} className="rounded border-slate-300" />
+                      <input type="checkbox" checked={filters.seater} onChange={() => toggleFilter('seater')} className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
                       <span className="text-sm text-slate-600 dark:text-slate-400">Seater</span>
                     </label>
                   </div>
